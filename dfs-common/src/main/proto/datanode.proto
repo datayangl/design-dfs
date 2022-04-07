@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package design.dfs.common.proto;
+
+option java_multiple_files = true;
+option java_package = "design.dfs.model.datanode";
+
+message RegisterRequest {
+  string hostname = 1;
+  int32 nioPort = 2;
+  int32 httpPort = 3;
+  int64 storedDataSize = 4;
+  int64 freeSpace = 5;
+  int32 nodeId = 6;
+}
+
+message HeartbeatRequest {
+  string hostname = 1;
+}
+
+message HeartbeatResponse {
+  string resp = 1;
+}
+
+message ReplicaCommand {
+  string filename = 1;
+  string hostname = 2;
+  int32 port = 3;
+  int32 command = 4;
+}
