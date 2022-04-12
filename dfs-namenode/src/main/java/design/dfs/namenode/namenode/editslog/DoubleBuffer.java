@@ -1,6 +1,7 @@
 package design.dfs.namenode.namenode.editslog;
 
 import design.dfs.namenode.namenode.config.NameNodeConfig;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.List;
@@ -8,10 +9,8 @@ import java.util.List;
 /**
  * 双缓冲
  *
- *
- * 并发问题? todo
- * 定时刷新机制? todo
  */
+@Slf4j
 public class DoubleBuffer {
     private NameNodeConfig nameNodeConfig;
     private EditLogBuffer currentBuffer;
@@ -24,10 +23,11 @@ public class DoubleBuffer {
     }
 
     /**
-     * 写入一条editlog
+     * 写入 editlog
      */
     public void write(EditLogWrapper editLog) throws IOException {
         currentBuffer.write(editLog);
+        log.info("写入editslog:{}, 当前缓冲区大小为{}", editLog, currentBuffer.size());
     }
 
     /**
@@ -51,9 +51,9 @@ public class DoubleBuffer {
     }
 
     /**
-     * 是否可以刷新磁盘
+     * 判断是否可以刷新磁盘 (currentBuffer 的大小是否超过溢写值)
      *
-     * @return 是否可以刷磁盘
+     * @return
      */
     public boolean shouldForceSync() {
         return currentBuffer.size() >= nameNodeConfig.getEditLogFlushThreshold();

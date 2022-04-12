@@ -10,6 +10,9 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * EditLog 缓冲
+ */
 @Slf4j
 public class EditLogBuffer {
     private final NameNodeConfig nameNodeConfig;

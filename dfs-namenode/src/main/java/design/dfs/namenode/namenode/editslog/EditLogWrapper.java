@@ -73,4 +73,9 @@ public class EditLogWrapper {
         }
         return ret;
     }
+
+    @Override
+    public String toString() {
+        return "path:" + editLog.getPath() + ", opType:" + editLog.getOpType() + ", txid:" + editLog.getTxId();
+    }
 }

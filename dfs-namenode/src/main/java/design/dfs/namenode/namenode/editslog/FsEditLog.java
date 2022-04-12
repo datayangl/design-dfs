@@ -3,12 +3,20 @@ package design.dfs.namenode.namenode.editslog;
 import design.dfs.namenode.namenode.config.NameNodeConfig;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * 管理 EditLog
+ *
+ * 使用 DoubleBuffer 的并发问题：
+ *  1.多个线程写 editlog == 加锁
+ *  2.多个线程等待flush，这个场景是 thread1 准备flush currentBuffer(写满)，但是thread2 syncBuffer（刷盘中，比较慢）flush还未结束，此时就会导致thread1阻塞等待 thread2 flush 结束
+ *
  */
 @Slf4j
 public class FsEditLog {
@@ -28,6 +36,7 @@ public class FsEditLog {
 
     /**
      * 每个线程保存的txid
+     * 多线程场景下，在刷写磁盘阶段可能会存在其他的线程准备写入 editlog 且 Txid < syncTxid，阻塞等待刷盘结束
      */
     private ThreadLocal<Long> localTxId = new ThreadLocal<>();
 
@@ -54,7 +63,7 @@ public class FsEditLog {
     public FsEditLog(NameNodeConfig nameNodeConfig) {
         this.nameNodeConfig = nameNodeConfig;
         this.editLogBuffer = new DoubleBuffer(nameNodeConfig);
-        //this.loadEditLogInfos();
+        this.loadEditLogInfos();
     }
 
     /**
@@ -83,11 +92,11 @@ public class FsEditLog {
                 return;
             }
 
-            // 设置刷盘标志位
+            // 设置刷盘标志位，阻塞后续写入
             isSchedulingSync = true;
         }
 
-        // 异步刷盘
+        // 运行到这里意味着 isSchedulingSync = true，开始异步刷盘
         logSync();
     }
 
@@ -98,8 +107,6 @@ public class FsEditLog {
         try {
             while (isSchedulingSync) {
                 wait(1000);
-                // 此时就释放锁，等待一秒再次尝试获取锁，去判断
-                // isSchedulingSync是否为false，就可以脱离出while循环
             }
         } catch (Exception e) {
             log.info("waitSchedulingSync has interrupted !!");
@@ -115,9 +122,10 @@ public class FsEditLog {
             long txId = localTxId.get();
             localTxId.remove();
             /*
-             * 在这种情况下需要等待：
-             * 1. 有其他线程正在刷磁盘，但是其他线程刷的磁盘的最大txid比当前需要刷磁盘的线程id少。
-             * 这通常表示：正在刷磁盘的线程不会把当前线程需要刷的数据刷到磁盘中
+             * 并发场景可能会出现问题：
+             * 1. 有其他线程正在刷磁盘，而且其他线程刷的磁盘的最大 txid 比当前需要刷磁盘线程的 txid 小。这个场景主要是因为syncBuffer flush磁盘
+             * 比较慢，而currentBuffer 很快写满了也准备刷写，此时前者的 txid 会比 后者的 txid 小
+             *
              */
             while (txId > syncTxid && isSyncRunning) {
                 try {
@@ -126,11 +134,7 @@ public class FsEditLog {
                     e.printStackTrace();
                 }
             }
-            /*
-             * 多个线程在上面等待，当前一个线程刷磁盘操作完成后，唤醒了一堆线程，此时只有一个线程获取到锁。
-             * 这个线程会进行刷磁盘操作，当这个线程释放锁之后，其他被唤醒的线程会依次获取到锁。
-             * 此时每个被唤醒的线程需要重新判断一次，自己要做的事情是不是被其他线程干完了
-             */
+
             if (txId <= syncTxid) {
                 return;
             }
@@ -144,7 +148,7 @@ public class FsEditLog {
             // 设置当前正在同步到磁盘的标志位
             isSchedulingSync = false;
 
-            // 唤醒哪些正在wait的线程
+            // 唤醒等待flush结束的线程
             notifyAll();
 
             // 正在刷磁盘
@@ -161,7 +165,6 @@ public class FsEditLog {
         }
 
         synchronized (this) {
-            // 同步完了磁盘之后，就会将标志位复位，再释放锁
             isSyncRunning = false;
             notifyAll();
         }
@@ -182,5 +185,43 @@ public class FsEditLog {
                 log.error("强制刷新EditLog缓冲区到磁盘失败.", e);
             }
         }
+    }
+
+    /**
+     * 从磁盘中加载 editslog 文件信息
+     */
+    private void loadEditLogInfos() {
+        this.editLogInfos = new CopyOnWriteArrayList<>();
+        File dir = new File(nameNodeConfig.getBaseDir());
+        if (!dir.isDirectory()) {
+            return;
+        }
+        File[] files = dir.listFiles();
+        if (files == null || files.length == 0) {
+            return;
+        }
+        for (File file : files) {
+            if (!file.getName().contains("edits")) {
+                continue;
+            }
+            long[] index = getIndexFromFileName(file.getName());
+            this.editLogInfos.add(new EditsLogInfo(index[0], index[1], nameNodeConfig.getBaseDir() + File.separator + file.getName()));
+        }
+        this.editLogInfos.sort(null);
+    }
+
+    /**
+     * 文件名提取index
+     * @param name 文件名，比如 1_100.log
+     * @return index 数组， 比如  [1,100]
+     */
+    private long[] getIndexFromFileName(String name) {
+        Matcher matcher = indexPattern.matcher(name);
+        long[] result = new long[2];
+        if (matcher.find()) {
+            result[0] = Long.parseLong(matcher.group(1));
+            result[1] = Long.parseLong(matcher.group(2));
+        }
+        return result;
     }
 }
