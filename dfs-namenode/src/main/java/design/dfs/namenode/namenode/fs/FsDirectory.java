@@ -1,7 +1,9 @@
 package design.dfs.namenode.namenode.fs;
 
+import design.dfs.backup.fs.FsImage;
 import design.dfs.common.enums.NodeType;
 import design.dfs.common.utils.StringUtil;
+import design.dfs.model.backup.INode;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -141,6 +143,33 @@ public class FsDirectory {
             return newChildrenNode;
         }
         return childrenNode;
+    }
+
+    /**
+     * 生成 FsImage
+     */
+    public FsImage createFsImage() {
+        try {
+            lock.readLock().lock();
+            INode iNode = Node.toINode(root);
+            FsImage fsImage = new FsImage(0L, iNode);
+            return fsImage;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * 应用 FsImage 初始化内存目录树
+     * @param fsImage
+     */
+    public void applyFsImage(FsImage fsImage) {
+        try {
+            lock.writeLock().lock();
+            this.root = Node.parseINode(fsImage.getINode(), "");
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**

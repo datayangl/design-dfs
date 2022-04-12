@@ -1,17 +1,16 @@
 package design.dfs.namenode.namenode.fs;
 
 import design.dfs.common.enums.NodeType;
+import design.dfs.model.backup.INode;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.io.File;
+import java.util.*;
 
 /**
  * 文件系统节点，文件or目录，包含子节点
  *
- * -- 寻找
  */
 @Data
 @Slf4j
@@ -61,6 +60,57 @@ public class Node {
             return "";
         }
         return parentPath + "/" + parent.path;
+    }
+
+    /**
+     * Node -> INode
+     * INode 可以理解为 Node 的 ProtoBuf 版本，便于数据的序列化和构造，使用递归 DFS 算法进行转换
+     * @param node
+     * @return
+     */
+    public static INode toINode(Node node) {
+        INode.Builder builder = INode.newBuilder();
+        String path = node.getPath();
+        int type = node.type;
+        builder.setPath(path);
+        builder.setType(type);
+        builder.putAllAttr(node.getAttr());
+        Collection<Node> children = node.getChildren().values();
+        if (children.isEmpty()) {
+            return  builder.build();
+        }
+        List<INode> tmpNodes = new ArrayList<>(children.size());
+        for (Node child : children) {
+            INode iNode = toINode(child);
+            tmpNodes.add(iNode);
+        }
+        builder.addAllChildren(tmpNodes);
+        return builder.build();
+    }
+
+    public static Node parseINode(INode iNode) {
+        return parseINode(iNode, null);
+    }
+
+    public static Node parseINode(INode iNode, String parent) {
+        Node node = new Node();
+        if (parent != null && log.isDebugEnabled()) {
+            log.debug("parseINode executing :[path={},  type={}]", parent, node.getType());
+        }
+        String path = iNode.getPath();
+        int type = iNode.getType();
+        node.setPath(path);
+        node.setType(type);
+        node.putAllAttr(iNode.getAttrMap());
+        List<INode> children = iNode.getChildrenList();
+        if (children.isEmpty()) {
+            return node;
+        }
+
+        for (INode child : children) {
+            node.addChildren(parseINode(child, parent == null? null : parent + File.separator + child.getPath()));
+        }
+        return node;
     }
 
     /**
