@@ -1,8 +1,8 @@
-package design.dfs.namenode.namenode.server;
+package design.dfs.namenode.server;
 
 import design.dfs.common.network.NetServer;
 import design.dfs.common.utils.DefaultScheduler;
-import design.dfs.namenode.namenode.fs.DiskFileSystem;
+import design.dfs.namenode.fs.DiskFileSystem;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Collections;

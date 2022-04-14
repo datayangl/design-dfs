@@ -1,4 +1,4 @@
-package design.dfs.namenode.namenode.server;
+package design.dfs.namenode.server;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import design.dfs.common.enums.PacketType;
@@ -8,9 +8,9 @@ import design.dfs.common.network.NettyPacket;
 import design.dfs.common.network.RequestWrapper;
 import design.dfs.model.datanode.HeartbeatRequest;
 import design.dfs.model.datanode.RegisterRequest;
-import design.dfs.namenode.namenode.config.NameNodeConfig;
-import design.dfs.namenode.namenode.datanode.DataNodeInfo;
-import design.dfs.namenode.namenode.datanode.DataNodeManager;
+import design.dfs.namenode.config.NameNodeConfig;
+import design.dfs.namenode.datanode.DataNodeInfo;
+import design.dfs.namenode.datanode.DataNodeManager;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 

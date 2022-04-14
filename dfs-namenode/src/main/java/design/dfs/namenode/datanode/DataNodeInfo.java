@@ -1,4 +1,4 @@
-package design.dfs.namenode.namenode.datanode;
+package design.dfs.namenode.datanode;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;

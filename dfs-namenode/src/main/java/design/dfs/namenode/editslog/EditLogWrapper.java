@@ -1,4 +1,4 @@
-package design.dfs.namenode.namenode.editslog;
+package design.dfs.namenode.editslog;
 
 import design.dfs.common.utils.ByteUtil;
 import design.dfs.model.backup.EditLog;

@@ -1,12 +1,12 @@
-package design.dfs.namenode.namenode.datanode;
+package design.dfs.namenode.datanode;
 
 import design.dfs.common.FileInfo;
 import design.dfs.common.utils.DateUtil;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.model.datanode.HeartbeatRequest;
 import design.dfs.model.datanode.RegisterRequest;
-import design.dfs.namenode.namenode.config.NameNodeConfig;
-import design.dfs.namenode.namenode.fs.DiskFileSystem;
+import design.dfs.namenode.config.NameNodeConfig;
+import design.dfs.namenode.fs.DiskFileSystem;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;

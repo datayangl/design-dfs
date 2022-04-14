@@ -1,4 +1,4 @@
-package design.dfs.namenode.namenode.fs;
+package design.dfs.namenode.fs;
 
 import design.dfs.common.enums.NodeType;
 import design.dfs.model.backup.INode;

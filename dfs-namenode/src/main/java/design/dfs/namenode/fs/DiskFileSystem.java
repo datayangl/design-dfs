@@ -1,11 +1,10 @@
-package design.dfs.namenode.namenode.fs;
+package design.dfs.namenode.fs;
 
 import design.dfs.common.enums.FsOpType;
-import design.dfs.namenode.namenode.config.NameNodeConfig;
-import design.dfs.namenode.namenode.datanode.DataNodeManager;
-import design.dfs.namenode.namenode.editslog.EditLogWrapper;
-import design.dfs.namenode.namenode.editslog.FsEditLog;
-import lombok.AllArgsConstructor;
+import design.dfs.namenode.config.NameNodeConfig;
+import design.dfs.namenode.datanode.DataNodeManager;
+import design.dfs.namenode.editslog.EditLogWrapper;
+import design.dfs.namenode.editslog.FsEditLog;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;

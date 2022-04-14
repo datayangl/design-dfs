@@ -1,4 +1,4 @@
-package design.dfs.namenode.namenode.config;
+package design.dfs.namenode.config;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

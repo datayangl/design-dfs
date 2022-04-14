@@ -1,16 +1,11 @@
 package design.dfs.namenode;
 
 import design.dfs.common.utils.DefaultScheduler;
-import design.dfs.namenode.namenode.config.NameNodeConfig;
-import design.dfs.namenode.namenode.datanode.DataNodeManager;
-import design.dfs.namenode.namenode.fs.DiskFileSystem;
-import design.dfs.namenode.namenode.config.NameNodeConfig;
-import design.dfs.namenode.namenode.datanode.DataNodeManager;
-import design.dfs.namenode.namenode.fs.DiskFileSystem;
-import design.dfs.namenode.namenode.server.NameNodeApis;
-import design.dfs.namenode.namenode.server.NameNodeServer;
-import design.dfs.namenode.namenode.server.NameNodeApis;
-import design.dfs.namenode.namenode.server.NameNodeServer;
+import design.dfs.namenode.config.NameNodeConfig;
+import design.dfs.namenode.datanode.DataNodeManager;
+import design.dfs.namenode.fs.DiskFileSystem;
+import design.dfs.namenode.server.NameNodeApis;
+import design.dfs.namenode.server.NameNodeServer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;

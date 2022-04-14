@@ -1,4 +1,4 @@
-package design.dfs.namenode.namenode.editslog;
+package design.dfs.namenode.editslog;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

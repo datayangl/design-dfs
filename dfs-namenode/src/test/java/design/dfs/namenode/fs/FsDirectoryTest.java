@@ -1,8 +1,6 @@
 package design.dfs.namenode.fs;
 
 import design.dfs.common.enums.NodeType;
-import design.dfs.namenode.namenode.fs.FsDirectory;
-import design.dfs.namenode.namenode.fs.Node;
 import org.junit.Test;
 
 import java.io.File;

@@ -1,14 +1,9 @@
 package design.dfs.backupnamenode.fs;
 
-import design.dfs.backup.config.BackupNodeConfig;
 import design.dfs.backup.fs.FsImage;
-import design.dfs.backup.fs.FsImageCheckpointTask;
-import design.dfs.backup.fs.InMemoryNameSystem;
 import design.dfs.common.enums.NodeType;
-import design.dfs.namenode.namenode.fs.FsDirectory;
-import design.dfs.namenode.namenode.fs.Node;
-import org.junit.After;
-import org.junit.Before;
+import design.dfs.namenode.fs.FsDirectory;
+import design.dfs.namenode.fs.Node;
 import org.junit.Test;
 
 import java.io.IOException;

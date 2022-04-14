@@ -1,7 +1,7 @@
 package design.dfs.backup.fs;
 
 import design.dfs.backup.config.BackupNodeConfig;
-import design.dfs.namenode.namenode.fs.AbstractFileSystem;
+import design.dfs.namenode.fs.AbstractFileSystem;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
