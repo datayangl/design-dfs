@@ -1,6 +1,7 @@
 package design.dfs.common.network;
 
 import design.dfs.common.Constants;
+import design.dfs.common.exception.RequestTimeoutException;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.common.utils.NetUtil;
 import io.netty.channel.ChannelHandlerContext;
@@ -22,11 +23,11 @@ public class DefaultChannelHandler extends AbstractChannelHandler {
     private volatile boolean hasOtherHandlers = false;
     private List<NettyPacketListener> nettyPacketListeners = new CopyOnWriteArrayList<>();
     private List<ConnectListener> connectListeners = new CopyOnWriteArrayList<>();
-//    private SyncRequestSupport syncRequestSupport;
+    private SyncRequestSupport syncRequestSupport;
 
     public DefaultChannelHandler(String name, DefaultScheduler defaultScheduler, long requestTimeout) {
         this.name = name;
-//        this.syncRequestSupport = new SyncRequestSupport(name, defaultScheduler, requestTimeout);
+        this.syncRequestSupport = new SyncRequestSupport(name, defaultScheduler, requestTimeout);
     }
 
     /**
@@ -55,6 +56,17 @@ public class DefaultChannelHandler extends AbstractChannelHandler {
     }
 
     /**
+     * 发送消息，同步获取响应
+     *
+     * @param nettyPacket 网络包
+     * @return 响应
+     * @throws IllegalStateException 网络异常
+     */
+    public NettyPacket sendSync(NettyPacket nettyPacket) throws InterruptedException, RequestTimeoutException {
+        return syncRequestSupport.sendRequest(nettyPacket);
+    }
+
+    /**
      * 发送消息，不需要同步获取响应
      * <p>
      * 可以通过 {@link #addNettyPackageListener(NettyPacketListener)} 方法获取返回的数据包
@@ -70,23 +82,29 @@ public class DefaultChannelHandler extends AbstractChannelHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         socketChannel = (SocketChannel) ctx.channel();
+        syncRequestSupport.setSocketChannel(socketChannel);
         invokeConnectListener(true);
         log.debug("Socket channel is connected. {}", NetUtil.getChannelId(ctx.channel()));
         ctx.fireChannelActive();
-
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         socketChannel = null;
+        syncRequestSupport.setSocketChannel(socketChannel);
         invokeConnectListener(false);
         log.debug("Socket channel is disconnected！{}", NetUtil.getChannelId(ctx.channel()));
         ctx.fireChannelInactive();
     }
 
     @Override
-    protected boolean handlePackage(ChannelHandlerContext ctx, NettyPacket nettyPacket) throws Exception {
-        return false;
+    protected boolean handlePackage(ChannelHandlerContext ctx, NettyPacket request) throws Exception {
+        synchronized (this) {
+            boolean ret = syncRequestSupport.onResponse(request);
+            RequestWrapper requestWrapper = new RequestWrapper(ctx, request);
+            invokeListeners(requestWrapper);
+            return !hasOtherHandlers || ret;
+        }
     }
 
     @Override

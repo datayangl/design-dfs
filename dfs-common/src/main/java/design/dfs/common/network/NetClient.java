@@ -1,5 +1,6 @@
 package design.dfs.common.network;
 
+import design.dfs.common.exception.RequestTimeoutException;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.common.utils.NamedThreadFactory;
 import io.netty.bootstrap.Bootstrap;
@@ -45,13 +46,14 @@ public class NetClient {
         this.connectThreadGroup = new NioEventLoopGroup(1,
                 new NamedThreadFactory("NetClient-Event-", false));
         this.defaultChannelHandler = new DefaultChannelHandler(name, defaultScheduler, requestTimeout);
-//        this.defaultChannelHandler.addConnectListener(connected -> {
-//            if (connected) {
-//                synchronized (NetClient.this) {
-//                    NetClient.this.notifyAll();
-//                }
-//            }
-//        });
+        this.defaultChannelHandler.addConnectListener(connected -> {
+            if (connected) {
+                synchronized (NetClient.this) {
+                    // 避免等待连接的线程长一直阻塞
+                    NetClient.this.notifyAll();
+                }
+            }
+        });
         this.baseChannelInitializer = new BaseChannelInitializer();
         this.baseChannelInitializer.addHandler(defaultChannelHandler);
     }
@@ -206,6 +208,10 @@ public class NetClient {
     }
 
 
+    public NettyPacket sendSync(NettyPacket nettyPacket) throws RequestTimeoutException, InterruptedException {
+        ensureConnected();
+        return defaultChannelHandler.sendSync(nettyPacket);
+    }
     /**
      * send request
      *
