@@ -13,7 +13,6 @@ import java.util.Map;
 @Slf4j
 public class EditLogWrapper {
     private EditLog editLog;
-    // PrettyCodes.trimMapSize() todo
     public EditLogWrapper(int opType, String path) {
         this(opType, path, new HashMap());
     }
@@ -76,6 +75,6 @@ public class EditLogWrapper {
 
     @Override
     public String toString() {
-        return "path:" + editLog.getPath() + ", opType:" + editLog.getOpType() + ", txid:" + editLog.getTxId();
+        return "path:" + editLog.getPath() + ", opType:" + editLog.getOpType() + ", txId:" + editLog.getTxId();
     }
 }

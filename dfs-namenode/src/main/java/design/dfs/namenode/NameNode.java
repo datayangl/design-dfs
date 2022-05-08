@@ -32,7 +32,7 @@ public class NameNode {
     /**
      * 基于磁盘的文件系统
      */
-    private final DiskFileSystem diskNameSystem;
+    private final DiskFileSystem diskFileSystem;
     /**
      * NameNode 服务器
      */
@@ -42,15 +42,12 @@ public class NameNode {
     public NameNode(NameNodeConfig nameNodeConfig) {
         this.defaultScheduler = new DefaultScheduler("NameNode-Scheduler-");
         this.dataNodeManager = new DataNodeManager(nameNodeConfig, defaultScheduler);
-        this.diskNameSystem = new DiskFileSystem(nameNodeConfig, dataNodeManager);
-        this.nameNodeApis = new NameNodeApis(diskNameSystem.getNameNodeConfig(), dataNodeManager);
-        this.nameNodeServer = new NameNodeServer(defaultScheduler, diskNameSystem, nameNodeApis);
+        this.diskFileSystem = new DiskFileSystem(nameNodeConfig, dataNodeManager);
+        this.nameNodeApis = new NameNodeApis(diskFileSystem.getNameNodeConfig(), diskFileSystem, dataNodeManager);
+        this.nameNodeServer = new NameNodeServer(defaultScheduler, diskFileSystem, nameNodeApis);
     }
 
     public static void main(String[] args) {
-        // 测试阶段，使用默认配置
-        String propertiesPath = NameNode.class.getClassLoader().getResource("conf/namenode.properties").getPath();
-        args= new String[]{propertiesPath};
         if (args == null || args.length == 0) {
             throw new IllegalArgumentException("配置文件不能为空");
         }
@@ -98,7 +95,7 @@ public class NameNode {
      */
     public void start() throws Exception {
         if (started.compareAndSet(false, true)) {
-            this.diskNameSystem.recoveryNamespace();
+            this.diskFileSystem.recoveryNamespace();
             this.nameNodeServer.start();
         }
     }
@@ -108,7 +105,7 @@ public class NameNode {
      */
     public void shutdown()  {
         if (started.compareAndSet(true, false)) {
-            this.diskNameSystem.shutdown();
+            this.diskFileSystem.shutdown();
             this.nameNodeServer.shutdown();
         }
     }

@@ -1,10 +1,12 @@
 package design.dfs.namenode.editslog;
 
+import design.dfs.common.utils.FileUtil;
 import design.dfs.namenode.config.NameNodeConfig;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
@@ -221,6 +223,42 @@ public class FsEditLog {
         if (matcher.find()) {
             result[0] = Long.parseLong(matcher.group(1));
             result[1] = Long.parseLong(matcher.group(2));
+        }
+        return result;
+    }
+
+    /**
+     * 从文件中读取 EditLog
+     * @param path
+     * @return
+     */
+    public List<EditLogWrapper> readEditLogFromFile(String path) throws IOException {
+        return EditLogWrapper.parseFrom(FileUtil.readBuffer(path));
+    }
+
+    /**
+     * 获取当前写 EditLog 的缓冲区
+     *
+     * @return 当前写editLog的缓冲区
+     */
+    public List<EditLogWrapper> getCurrentEditLog() {
+        synchronized (this) {
+            return editLogBuffer.getCurrentEditLog();
+        }
+    }
+
+    /**
+     * 获取 比minTxId 更大且经过排序的 EditLog 文件
+     * @param minTxId
+     * @return
+     */
+    public List<EditsLogInfo> getSortedEditsLogFiles(long minTxId) {
+        List<EditsLogInfo> result = new ArrayList<>();
+        for (EditsLogInfo editsLogInfo : editLogInfos) {
+            if (editsLogInfo.getEnd() <= minTxId) {
+                continue;
+            }
+            result.add(editsLogInfo);
         }
         return result;
     }

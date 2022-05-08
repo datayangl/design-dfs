@@ -11,13 +11,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 内存文件系统
  */
 @Slf4j
-public class InMemoryNameSystem extends AbstractFileSystem {
+public class InMemoryFileSystem extends AbstractFileSystem {
     private BackupNodeConfig backupNodeConfig;
     private volatile long maxTxId = 0L;
     private AtomicBoolean recovering = new AtomicBoolean(false);
 
-
-    public InMemoryNameSystem(BackupNodeConfig backupNodeConfig) {
+    public InMemoryFileSystem(BackupNodeConfig backupNodeConfig) {
         this.backupNodeConfig = backupNodeConfig;
     }
 
@@ -30,7 +29,7 @@ public class InMemoryNameSystem extends AbstractFileSystem {
     }
 
     @Override
-    protected void recoveryNamespace() throws IOException {
+    public void recoveryNamespace() throws IOException {
         try {
             if (recovering.compareAndSet(false, true)) {
                 FsImage fsImage = scanLatestValidFsImage(backupNodeConfig.getBaseDir());
@@ -45,5 +44,10 @@ public class InMemoryNameSystem extends AbstractFileSystem {
             throw e;
         }
     }
-
+    /**
+     * 恢复过程是否完成
+     */
+    public boolean isRecovering() {
+        return recovering.get();
+    }
 }

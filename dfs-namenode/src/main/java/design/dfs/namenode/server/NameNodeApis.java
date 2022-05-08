@@ -6,17 +6,28 @@ import design.dfs.common.exception.NameNodeException;
 import design.dfs.common.network.AbstractChannelHandler;
 import design.dfs.common.network.NettyPacket;
 import design.dfs.common.network.RequestWrapper;
+import design.dfs.model.backup.FetchEditsLogRequest;
+import design.dfs.model.backup.FetchEditsLogResponse;
+import design.dfs.model.client.MkdirRequest;
 import design.dfs.model.datanode.HeartbeatRequest;
 import design.dfs.model.datanode.RegisterRequest;
 import design.dfs.namenode.config.NameNodeConfig;
 import design.dfs.namenode.datanode.DataNodeInfo;
 import design.dfs.namenode.datanode.DataNodeManager;
+import design.dfs.namenode.editslog.EditLogWrapper;
+import design.dfs.namenode.fs.DiskFileSystem;
+import design.dfs.namenode.fs.EditLogBufferFetcher;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 /**
  * NameNode 的业务处理逻辑
@@ -24,16 +35,20 @@ import java.util.concurrent.*;
 @Slf4j
 public class NameNodeApis extends AbstractChannelHandler {
     private final NameNodeConfig nameNodeConfig;
+    private final DiskFileSystem diskFileSystem;
     private final DataNodeManager dataNodeManager;
     private final ThreadPoolExecutor executor;
     protected int nodeId;
+    private final EditLogBufferFetcher editLogBufferFetcher;
 
-    public NameNodeApis(NameNodeConfig nameNodeConfig, DataNodeManager dataNodeManager) {
+    public NameNodeApis(NameNodeConfig nameNodeConfig, DiskFileSystem diskFileSystem, DataNodeManager dataNodeManager) {
         this.nameNodeConfig = nameNodeConfig;
+        this.diskFileSystem = diskFileSystem;
         this.dataNodeManager = dataNodeManager;
         this.executor = new ThreadPoolExecutor(nameNodeConfig.getNameNodeApiCoreSize(), nameNodeConfig.getNameNodeApiMaximumPoolSize(),
                 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(nameNodeConfig.getNameNodeApiQueueSize()));
         this.nodeId = nameNodeConfig.getNameNodeId();
+        this.editLogBufferFetcher = new EditLogBufferFetcher(diskFileSystem);
     }
 
     @Override
@@ -79,6 +94,12 @@ public class NameNodeApis extends AbstractChannelHandler {
                 case HEART_BEAT:
                     handleDataNodeHeartbeatRequest(requestWrapper);
                     break;
+                case MKDIR:
+                    handleMkdirRequest(requestWrapper);
+                    break;
+                case FETCH_EDIT_LOG:
+                    handleFetchEditLogRequest(requestWrapper);
+                    break;
                 default:
                     break;
             }
@@ -123,6 +144,37 @@ public class NameNodeApis extends AbstractChannelHandler {
 
     }
 
+    /**
+     * handle mkdir request
+     * @param requestWrapper
+     * @throws InvalidProtocolBufferException
+     */
+    private void handleMkdirRequest(RequestWrapper requestWrapper) throws InvalidProtocolBufferException {
+        NettyPacket request = requestWrapper.getNettyPacket();
+        MkdirRequest mkdirRequest = MkdirRequest.parseFrom(request.getBody());
+        String fileName = mkdirRequest.getPath();
+        this.diskFileSystem.mkdir(fileName, mkdirRequest.getAttrMap());
+        requestWrapper.sendResponse();
+    }
+
+    private void handleFetchEditLogRequest(RequestWrapper requestWrapper) throws InvalidProtocolBufferException {
+        FetchEditsLogRequest fetchEditsLogRequest = FetchEditsLogRequest.parseFrom(requestWrapper.getNettyPacket().getBody());
+        long txId = fetchEditsLogRequest.getTxId();
+        List<EditLogWrapper> result = new ArrayList<>();
+        try {
+            result = editLogBufferFetcher.fetch(txId);
+        } catch (IOException e) {
+            log.error("fetch EditLog failed：", e);
+        }
+        // 构造 response
+        FetchEditsLogResponse response = FetchEditsLogResponse.newBuilder()
+                .addAllEditLogs(result
+                        .stream()
+                        .map(EditLogWrapper::getEditLog)
+                        .collect(Collectors.toList()))
+                .build();
+        requestWrapper.sendResponse(response);
+    }
     /**
      * 返回异常响应信息
      */

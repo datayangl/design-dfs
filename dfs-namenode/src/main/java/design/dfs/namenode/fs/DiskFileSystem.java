@@ -1,5 +1,6 @@
 package design.dfs.namenode.fs;
 
+import design.dfs.common.annotation.TestOnly;
 import design.dfs.common.enums.FsOpType;
 import design.dfs.namenode.config.NameNodeConfig;
 import design.dfs.namenode.datanode.DataNodeManager;
@@ -22,12 +23,20 @@ public class DiskFileSystem extends AbstractFileSystem{
         super();
         this.nameNodeConfig = nameNodeConfig;
         this.editLog = new FsEditLog(nameNodeConfig);
-       dataNodeManager.setDiskFileSystem(this);
+        dataNodeManager.setDiskFileSystem(this);
 //        TrashPolicyDefault trashPolicyDefault = new TrashPolicyDefault(this, dataNodeManager, userManager);
 //        defaultScheduler.schedule("定时扫描物理删除文件", trashPolicyDefault,
 //                nameNodeConfig.getNameNodeTrashCheckInterval(),
 //                nameNodeConfig.getNameNodeTrashCheckInterval(), TimeUnit.MILLISECONDS);
     }
+
+    @TestOnly
+    public DiskFileSystem(NameNodeConfig nameNodeConfig) {
+        super();
+        this.nameNodeConfig = nameNodeConfig;
+        this.editLog = new FsEditLog(nameNodeConfig);
+    }
+
 
     public NameNodeConfig getNameNodeConfig() {
         return nameNodeConfig;
