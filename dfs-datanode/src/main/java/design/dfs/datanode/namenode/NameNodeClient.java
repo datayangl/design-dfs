@@ -82,7 +82,7 @@ public class NameNodeClient {
 
     private void handleDataNodeRegisterResponse(RequestWrapper requestWrapper) {
         ChannelHandlerContext ctx = requestWrapper.getCtx();
-        if (scheduledFuture != null) {
+        if (scheduledFuture == null) {
             log.info("start to send heartbeat at fixed rate, interval is: [interval={}ms]", datanodeConfig.getHeartbeatInterval());
             scheduledFuture = ctx.executor().scheduleAtFixedRate(new HeartbeatTask(ctx, datanodeConfig),
                     0, datanodeConfig.getHeartbeatInterval(), TimeUnit.MILLISECONDS);
