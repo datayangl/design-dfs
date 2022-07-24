@@ -1,7 +1,9 @@
 package design.dfs.namenode.fs;
 
+import design.dfs.backup.fs.FsImage;
 import design.dfs.common.annotation.TestOnly;
 import design.dfs.common.enums.FsOpType;
+import design.dfs.model.backup.EditLog;
 import design.dfs.namenode.config.NameNodeConfig;
 import design.dfs.namenode.datanode.DataNodeManager;
 import design.dfs.namenode.editslog.EditLogWrapper;
@@ -24,10 +26,6 @@ public class DiskFileSystem extends AbstractFileSystem{
         this.nameNodeConfig = nameNodeConfig;
         this.editLog = new FsEditLog(nameNodeConfig);
         dataNodeManager.setDiskFileSystem(this);
-//        TrashPolicyDefault trashPolicyDefault = new TrashPolicyDefault(this, dataNodeManager, userManager);
-//        defaultScheduler.schedule("定时扫描物理删除文件", trashPolicyDefault,
-//                nameNodeConfig.getNameNodeTrashCheckInterval(),
-//                nameNodeConfig.getNameNodeTrashCheckInterval(), TimeUnit.MILLISECONDS);
     }
 
     @TestOnly
@@ -44,7 +42,30 @@ public class DiskFileSystem extends AbstractFileSystem{
 
     @Override
     public void recoveryNamespace() throws Exception {
-        // 从快照恢复namespace todo
+        try {
+            FsImage fsImage = scanLatestValidFsImage(nameNodeConfig.getBaseDir());
+            long txId = 0L;
+            if (fsImage != null) {
+                txId = fsImage.getMaxTxId();
+                applyFsImage(fsImage);
+            }
+            // 回放 editLog 文件
+            this.editLog.playbackEditLog(txId, editLogWrapper -> {
+                EditLog editLog = editLogWrapper.getEditLog();
+                int opType = editLog.getOpType();
+                if (opType == FsOpType.MKDIR.getValue()) {
+                    // 这里要调用super.mkdir 回放的editLog不需要再刷磁盘
+                    super.mkdir(editLog.getPath(), editLog.getAttrMap());
+                } else if (opType == FsOpType.CREATE.getValue()) {
+                    super.createFile(editLog.getPath(), editLog.getAttrMap());
+                } else if (opType == FsOpType.DELETE.getValue()) {
+                    super.deleteFile(editLog.getPath());
+                }
+            });
+        } catch (Exception e) {
+            log.info("NameNode恢复命名空间异常：", e);
+            throw e;
+        }
     }
 
     @Override

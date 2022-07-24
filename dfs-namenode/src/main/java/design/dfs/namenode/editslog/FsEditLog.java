@@ -2,7 +2,9 @@ package design.dfs.namenode.editslog;
 
 import design.dfs.common.utils.FileUtil;
 import design.dfs.namenode.config.NameNodeConfig;
+import design.dfs.namenode.fs.PlaybackEditLogCallback;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.time.StopWatch;
 
 import java.io.File;
 import java.io.IOException;
@@ -225,6 +227,33 @@ public class FsEditLog {
             result[1] = Long.parseLong(matcher.group(2));
         }
         return result;
+    }
+
+    public void playbackEditLog(long txiId, PlaybackEditLogCallback callback) throws IOException {
+        long currentTxSeq = txiId;
+        this.txIdSeq = currentTxSeq;
+        List<EditsLogInfo> editsLogInfos = getSortedEditsLogFiles(txiId);
+        StopWatch stopWatch = new StopWatch();
+        for (EditsLogInfo info : editsLogInfos) {
+            if (info.getEnd() <= currentTxSeq) {
+                continue;
+            }
+            List<EditLogWrapper> editLogWrappers = readEditLogFromFile(info.getName());
+            for (EditLogWrapper editLogWrapper : editLogWrappers) {
+                long tmpTxId = editLogWrapper.getTxId();
+                if (tmpTxId < currentTxSeq) {
+                    continue;
+                }
+                currentTxSeq = tmpTxId;
+                this.txIdSeq = currentTxSeq;
+                if (callback != null) {
+                    callback.playback(editLogWrapper);
+                }
+            }
+            stopWatch.stop();
+            log.info("回放editLog文件: [file={}, cost={} s]", info.getName(), stopWatch.getTime() / 1000.0D);
+            stopWatch.reset();
+        }
     }
 
     /**
