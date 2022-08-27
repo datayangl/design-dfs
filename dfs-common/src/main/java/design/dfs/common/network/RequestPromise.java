@@ -83,7 +83,9 @@ public class RequestPromise {
             return;
         }
         timeout = true;
-        notifyAll();
+        synchronized (this) {
+            notifyAll();
+        }
     }
 
     public boolean isTimeout(long timeout) {
