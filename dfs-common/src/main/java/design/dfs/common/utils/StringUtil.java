@@ -1,6 +1,59 @@
 package design.dfs.common.utils;
 
+import java.io.File;
+import java.util.Random;
+
 public class StringUtil {
+    public static final Random RANDOM = new Random();
+    public static final String BASE_KEY = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+
+    /**
+     * 获取随机字符串
+     *
+     * @param length 字符串长度
+     * @return 随机字符串
+     */
+    public static String getRandomString(int length) {
+        return getRandomString(length, BASE_KEY);
+    }
+
+    /**
+     * 获取随机字符串
+     *
+     * @param length 字符串长度
+     * @return 随机字符串
+     */
+    public static String getRandomString(int length, boolean upperCase) {
+        return getRandomString(length, BASE_KEY, upperCase);
+    }
+
+    /**
+     * 获取随机字符串
+     *
+     * @param length 字符串长度
+     * @return 随机字符串
+     */
+    public static String getRandomString(int length, String key) {
+        return getRandomString(length, key, false);
+    }
+
+    /**
+     * 获取随机字符串
+     *
+     * @param length 字符串长度
+     * @return 随机字符串
+     */
+    public static String getRandomString(int length, String key, boolean upperCase) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            int number = RANDOM.nextInt(key.length());
+            sb.append(key.charAt(number));
+        }
+        String s = sb.toString();
+        return upperCase ? s.toUpperCase() : s;
+    }
+
     public static String[] split(String str, char c) {
         return str.split(String.valueOf(c));
 //        return org.apache.commons.lang3.StringUtils.split(str, c);
@@ -59,6 +112,19 @@ public class StringUtil {
         h *= m;
         h ^= h >>> 15;
         return h;
+    }
+
+    public static boolean validateFileName(String filename) {
+        String osName = System.getProperty("os.name").toLowerCase();
+        boolean win = osName.startsWith("win");
+        if (!win && !filename.startsWith(File.separator)) {
+            return false;
+        }
+        String name = new File(filename).getName();
+        if (filename.contains("//")) {
+            return false;
+        }
+        return !name.startsWith(".");
     }
 
     public static String format(int i) {

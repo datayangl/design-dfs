@@ -28,3 +28,20 @@ message ReplicaCommand {
   int32 port = 3;
   int32 command = 4;
 }
+
+message ReportCompleteStorageInfoRequest {
+  string hostname = 1;
+  repeated FileMetaInfo fileInfos = 2;
+  bool finished = 3;
+}
+
+message InformReplicaReceivedRequest {
+  string hostname = 1;
+  string filename = 2;
+  int64 fileSize = 3;
+}
+
+message FileMetaInfo {
+  string filename = 1;
+  int64 fileSize = 2;
+}

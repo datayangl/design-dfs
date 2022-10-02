@@ -1,6 +1,9 @@
 package design.dfs.common;
 
 
+import com.google.common.collect.Sets;
+
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -64,9 +67,9 @@ public class Constants {
      */
     public static final int MAX_REPLICA_NUM = 5;
 
-//    /**
-//     * 保留的属性名称
-//     */
-//    public static final Set<String> KEYS_ATTR_SET = Sets.newHashSet(ATTR_FILE_DEL_TIME,
-//            ATTR_REPLICA_NUM, ATTR_FILE_SIZE);
+    /**
+     * 保留的属性名称
+     */
+    public static final Set<String> KEYS_ATTR_SET = Sets.newHashSet(ATTR_FILE_DEL_TIME,
+            ATTR_REPLICA_NUM, ATTR_FILE_SIZE);
 }
