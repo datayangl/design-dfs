@@ -238,6 +238,7 @@ public class FsEditLog {
             if (info.getEnd() <= currentTxSeq) {
                 continue;
             }
+            stopWatch.start();
             List<EditLogWrapper> editLogWrappers = readEditLogFromFile(info.getName());
             for (EditLogWrapper editLogWrapper : editLogWrappers) {
                 long tmpTxId = editLogWrapper.getTxId();
