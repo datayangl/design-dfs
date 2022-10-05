@@ -1,6 +1,7 @@
 package design.dfs.namenode.datanode;
 
 import design.dfs.common.FileInfo;
+import design.dfs.common.exception.NameNodeException;
 import design.dfs.common.utils.DateUtil;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.model.datanode.HeartbeatRequest;
@@ -13,6 +14,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * 管理 DataNode
@@ -144,6 +146,13 @@ public class DataNodeManager {
         return true;
     }
 
+    private List<DataNodeInfo> getSortedReadyDataNode() {
+        return dataNodes.values().stream()
+                .filter(dataNodeInfo -> dataNodeInfo.getStatus() == DataNodeInfo.STATUS_READY)
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
     /**
      * 创建丢失副本的复制任务
      */
@@ -158,6 +167,16 @@ public class DataNodeManager {
             // 寻找可以复制副本的 DataNode
 
         }
+    }
+
+    /**
+     * @param username 该文件的所属的用户
+     * @param count    申请机器数量
+     *                 为文件分配dataNode机器列表
+     */
+    public List<DataNodeInfo> allocateDataNodes(String username, int count, String filename) throws Exception {
+        List<DataNodeInfo> sortedReadyDataNode = getSortedReadyDataNode();
+        return selectDataNodeFromList(sortedReadyDataNode, count, filename);
     }
 
     /**
@@ -180,6 +199,73 @@ public class DataNodeManager {
      */
     public DataNodeInfo chooseReadableDataNodeByFileName(String fileName) {
         return chooseReadableDataNodeByFileName(fileName, null);
+    }
+
+    /**
+     * 设置DataNode状态为Ready
+     *
+     * @param hostname DataNode主机名
+     */
+    public void setDataNodeReady(String hostname) {
+        DataNodeInfo dataNode = dataNodes.get(hostname);
+        if (dataNode != null) {
+            dataNode.setStatus(DataNodeInfo.STATUS_READY);
+        }
+    }
+
+    private List<DataNodeInfo> selectDataNodeFromList(List<DataNodeInfo> dataNodeList, int requiredNodeCount,
+                                                      String filename) throws NameNodeException {
+        int existCount = 0;
+        int findCount = 0;
+        List<DataNodeInfo> candidateNodes = new ArrayList<>(10);
+        for (DataNodeInfo dataNodeInfo : dataNodeList) {
+            if (dataNodeContainsFiles(dataNodeInfo.getHostname(), filename)) {
+                existCount++;
+                continue;
+            }
+            findCount++;
+            candidateNodes.add(dataNodeInfo);
+        }
+
+        if (candidateNodes.size() == requiredNodeCount) {
+            return candidateNodes;
+        } else if (candidateNodes.size() > requiredNodeCount) {
+            // 可选的 DataNode 节点数量多余需要的 DataNode 数量，则随机挑选
+            Random random = new Random();
+            List<DataNodeInfo> selectedDataNodes = new ArrayList<>();
+            for (int i = 0; i < requiredNodeCount; i++) {
+                int index = random.nextInt(candidateNodes.size());
+                DataNodeInfo dataNodeInfo = candidateNodes.get(index);
+                if (selectedDataNodes.contains(dataNodeInfo) ||
+                        dataNodeContainsFiles(dataNodeInfo.getHostname(), filename)) {
+                    continue;
+                }
+                selectedDataNodes.add(dataNodeInfo);
+            }
+            return selectedDataNodes;
+        }
+
+        log.error("DataNode数量不足：[datanodeList={}]", dataNodes.values());
+        throw new NameNodeException("DataNode数量不足: [applyCount=" + requiredNodeCount +
+                ", findCount=" + findCount +
+                ", existsFileNodeCount=" + existCount +
+                ", filename=" + filename);
+    }
+
+    /**
+     * 判断 DataNode 节点是否存在指定文件
+     * @param hostname
+     * @param filename
+     * @return
+     */
+    public boolean dataNodeContainsFiles(String hostname, String filename) {
+        replicaLock.readLock().lock();
+        try {
+            Map<String, FileInfo> files = filesByDataNode.getOrDefault(hostname, new HashMap<>());
+            return files.containsKey(filename);
+        } finally {
+            replicaLock.readLock().unlock();
+        }
     }
 
     /**
@@ -212,4 +298,7 @@ public class DataNodeManager {
         return dataNodes.get(hostname);
     }
 
+    public DiskFileSystem getDiskFileSystem() {
+        return diskFileSystem;
+    }
 }

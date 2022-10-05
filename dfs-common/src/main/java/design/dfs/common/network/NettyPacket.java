@@ -86,6 +86,14 @@ public class NettyPacket {
         header.put("packetType", String.valueOf(packetType));
     }
 
+    public void setUsername(String username) {
+        header.put("username", username);
+    }
+
+    public String getUserName() {
+        return header.getOrDefault("username", "");
+    }
+
     public void setError(String error) {
         header.put("error", error);
     }

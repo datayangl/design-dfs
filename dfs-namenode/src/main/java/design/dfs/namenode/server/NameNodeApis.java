@@ -1,6 +1,8 @@
 package design.dfs.namenode.server;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import design.dfs.common.Constants;
+import design.dfs.common.FileInfo;
 import design.dfs.common.enums.PacketType;
 import design.dfs.common.exception.NameNodeException;
 import design.dfs.common.network.AbstractChannelHandler;
@@ -8,24 +10,27 @@ import design.dfs.common.network.NettyPacket;
 import design.dfs.common.network.RequestWrapper;
 import design.dfs.model.backup.FetchEditsLogRequest;
 import design.dfs.model.backup.FetchEditsLogResponse;
+import design.dfs.model.client.CreateFileRequest;
+import design.dfs.model.client.CreateFileResponse;
 import design.dfs.model.client.MkdirRequest;
+import design.dfs.model.common.DataNode;
+import design.dfs.model.datanode.FileMetaInfo;
 import design.dfs.model.datanode.HeartbeatRequest;
 import design.dfs.model.datanode.RegisterRequest;
+import design.dfs.model.datanode.ReportCompleteStorageInfoRequest;
 import design.dfs.namenode.config.NameNodeConfig;
 import design.dfs.namenode.datanode.DataNodeInfo;
 import design.dfs.namenode.datanode.DataNodeManager;
 import design.dfs.namenode.editslog.EditLogWrapper;
 import design.dfs.namenode.fs.DiskFileSystem;
 import design.dfs.namenode.fs.EditLogBufferFetcher;
+import design.dfs.namenode.fs.Node;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
@@ -69,7 +74,8 @@ public class NameNodeApis extends AbstractChannelHandler {
 
     /**
      * 基于 PacketType 选择相应的业务处理逻辑，类似于 kafka 的处理机制
-     * @param ctx          上下文
+     *
+     * @param ctx     上下文
      * @param request
      * @return
      * @throws Exception
@@ -99,6 +105,15 @@ public class NameNodeApis extends AbstractChannelHandler {
                     break;
                 case FETCH_EDIT_LOG:
                     handleFetchEditLogRequest(requestWrapper);
+                    break;
+                case REPORT_STORAGE_INFO:
+                    handleDataNodeReportStorageInfoRequest(requestWrapper);
+                    break;
+                case CREATE_FILE:
+                    handleCreateFileRequest(requestWrapper);
+                    break;
+                case CREATE_FILE_CONFIRM:
+                    handleCreateFileConfirmRequest(requestWrapper);
                     break;
                 default:
                     break;
@@ -146,6 +161,7 @@ public class NameNodeApis extends AbstractChannelHandler {
 
     /**
      * handle mkdir request
+     *
      * @param requestWrapper
      * @throws InvalidProtocolBufferException
      */
@@ -174,6 +190,77 @@ public class NameNodeApis extends AbstractChannelHandler {
                         .collect(Collectors.toList()))
                 .build();
         requestWrapper.sendResponse(response);
+    }
+
+    private void handleDataNodeReportStorageInfoRequest(RequestWrapper requestWrapper) throws InvalidProtocolBufferException {
+        ReportCompleteStorageInfoRequest request =
+                ReportCompleteStorageInfoRequest.parseFrom(requestWrapper.getNettyPacket().getBody());
+        log.info("全量上报存储信息：[hostname={}, files={}]", request.getHostname(), request.getFileInfosCount());
+        for (FileMetaInfo file : request.getFileInfosList()) {
+            // TODO 考虑和内存目录树进行对比，看看是否存在内存目录树不存在的文件，下发命令让DataNode清除
+            FileInfo fileInfo = new FileInfo();
+            fileInfo.setFileName(file.getFilename());
+            fileInfo.setFileSize(file.getFileSize());
+            fileInfo.setHostname(request.getHostname());
+            // TODO 增加一个副本
+        }
+        if (request.getFinished()) {
+            dataNodeManager.setDataNodeReady(request.getHostname());
+            log.info("全量上报存储信息完成：[hostname={}]", request.getHostname());
+        }
+    }
+
+    private void handleCreateFileRequest(RequestWrapper requestWrapper) throws Exception {
+        NettyPacket request = requestWrapper.getNettyPacket();
+        CreateFileRequest createFileRequest = CreateFileRequest.parseFrom(request.getBody());
+        String fileName = createFileRequest.getFilename();
+
+        Map<String, String> attrMap = new HashMap<>(createFileRequest.getAttrMap());
+        String replicaNumStr = attrMap.get(Constants.ATTR_REPLICA_NUM);
+        attrMap.put(Constants.ATTR_FILE_SIZE, String.valueOf(createFileRequest.getFileSize()));
+        int replicaNum;
+        if (replicaNumStr != null) {
+            replicaNum = Integer.parseInt(replicaNumStr);
+            // 最少不能少于配置的数量
+            replicaNum = Math.max(replicaNum, diskFileSystem.getNameNodeConfig().getReplicaNum());
+            // 最大不能大于最大的数量
+            replicaNum = Math.min(replicaNum, Constants.MAX_REPLICA_NUM);
+        } else {
+            replicaNum = diskFileSystem.getNameNodeConfig().getReplicaNum();
+            attrMap.put(Constants.ATTR_REPLICA_NUM, String.valueOf(replicaNum));
+        }
+        Node node = diskFileSystem.listFiles(fileName);
+        if (node != null) {
+            throw new NameNodeException("文件已存在：" + createFileRequest.getFilename());
+        }
+        List<DataNodeInfo> dataNodeList = dataNodeManager.allocateDataNodes(request.getUserName(), replicaNum, fileName);
+        List<DataNode> dataNodes = dataNodeList.stream()
+                .map(e -> DataNode.newBuilder().setHostname(e.getHostname())
+                        .setNioPort(e.getNioPort())
+                        .setHttpPort(e.getHttpPort())
+                        .build())
+                .collect(Collectors.toList());
+        diskFileSystem.createFile(fileName, attrMap);
+        List<String> hostList = dataNodeList.stream().map(dataNodeInfo -> dataNodeInfo.getHostname()).collect(Collectors.toList());
+        log.info("创建文件：[filename={}, datanodes={}]", fileName, String.join(",", hostList));
+        CreateFileResponse response = CreateFileResponse.newBuilder()
+                .addAllDataNodes(dataNodes)
+                .setRealFileName(fileName)
+                .build();
+        requestWrapper.sendResponse(response);
+    }
+
+    private void handleCreateFileConfirmRequest(RequestWrapper requestWrapper) throws InvalidProtocolBufferException {
+            NettyPacket request = requestWrapper.getNettyPacket();
+            CreateFileRequest createFileRequest = CreateFileRequest.parseFrom(request.getBody());
+            String realFileName = createFileRequest.getFilename();
+            if (request.getAck() != 0) {
+                log.info("文件上传完毕");
+                //dataNodeManager.waitFileReceive(realFileName, 3000);
+            }
+            CreateFileResponse response = CreateFileResponse.newBuilder()
+                    .build();
+            requestWrapper.sendResponse(response);
     }
     /**
      * 返回异常响应信息

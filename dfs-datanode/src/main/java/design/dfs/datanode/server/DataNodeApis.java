@@ -4,6 +4,8 @@ import design.dfs.common.enums.PacketType;
 import design.dfs.common.network.AbstractChannelHandler;
 import design.dfs.common.network.NettyPacket;
 import design.dfs.common.network.RequestWrapper;
+import design.dfs.common.network.file.FilePacket;
+import design.dfs.common.network.file.FileReceiveHandler;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.datanode.config.DataNodeConfig;
 import io.netty.channel.ChannelHandlerContext;
@@ -19,10 +21,14 @@ import java.util.Set;
 public class DataNodeApis extends AbstractChannelHandler {
     private DataNodeConfig dataNodeConfig;
     private DefaultScheduler defaultScheduler;
+    private FileReceiveHandler fileReceiveHandler;
+    private DefaultFileTransportCallback transportCallback;
 
-    public DataNodeApis(DataNodeConfig dataNodeConfig, DefaultScheduler defaultScheduler) {
+    public DataNodeApis(DataNodeConfig dataNodeConfig, DefaultScheduler defaultScheduler, DefaultFileTransportCallback transportCallback) {
         this.dataNodeConfig = dataNodeConfig;
         this.defaultScheduler = defaultScheduler;
+        this.fileReceiveHandler = new FileReceiveHandler(transportCallback);
+        this.transportCallback = transportCallback;
     }
 
     @Override
@@ -31,7 +37,7 @@ public class DataNodeApis extends AbstractChannelHandler {
         RequestWrapper requestWrapper = new RequestWrapper(ctx, nettyPacket);
         switch (packetType) {
            case TRANSFER_FILE:
-               log.info("transfer file");
+                handleFileTransferRequest(requestWrapper);
                 break;
             default:
                 break;
@@ -42,5 +48,16 @@ public class DataNodeApis extends AbstractChannelHandler {
     @Override
     protected Set<Integer> interestPackageTypes() {
         return new HashSet<>();
+    }
+
+
+    /**
+     * 客户端上传文件处理
+     */
+    private void handleFileTransferRequest(RequestWrapper requestWrapper) {
+        FilePacket filePacket = FilePacket.parseFrom(requestWrapper.getNettyPacket().getBody());
+        if (filePacket.getType() == FilePacket.HEAD) {
+        }
+        fileReceiveHandler.handleRequest(filePacket);
     }
 }

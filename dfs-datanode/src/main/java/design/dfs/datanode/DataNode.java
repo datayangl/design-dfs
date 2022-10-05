@@ -5,6 +5,8 @@ import design.dfs.datanode.config.DataNodeConfig;
 import design.dfs.datanode.namenode.NameNodeClient;
 import design.dfs.datanode.server.DataNodeApis;
 import design.dfs.datanode.server.DataNodeServer;
+import design.dfs.datanode.server.DefaultFileTransportCallback;
+import design.dfs.datanode.server.StorageManager;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
@@ -64,8 +66,10 @@ public class DataNode {
 
     public DataNode(DataNodeConfig dataNodeConfig) {
         this.defaultScheduler = new DefaultScheduler("DataNode-Scheduler-");
-        DataNodeApis dataNodeApis = new DataNodeApis(dataNodeConfig, defaultScheduler);
-        this.nameNodeClient = new NameNodeClient(defaultScheduler, dataNodeConfig);
+        StorageManager storageManager = new StorageManager(dataNodeConfig);
+        DefaultFileTransportCallback defaultFileTransportCallback = new DefaultFileTransportCallback(storageManager);
+        DataNodeApis dataNodeApis = new DataNodeApis(dataNodeConfig, defaultScheduler, defaultFileTransportCallback);
+        this.nameNodeClient = new NameNodeClient(storageManager, defaultScheduler, dataNodeConfig);
         this.dataNodeServer = new DataNodeServer(dataNodeConfig, defaultScheduler, dataNodeApis);
     }
 

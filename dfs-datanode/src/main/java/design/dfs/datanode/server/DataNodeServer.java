@@ -6,6 +6,7 @@ import design.dfs.datanode.config.DataNodeConfig;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 
 @Slf4j
@@ -21,6 +22,7 @@ public class DataNodeServer {
     }
 
     public void start() throws InterruptedException {
+        this.netServer.addHandlers(Collections.singletonList(dataNodeApis));
         this.netServer.bind(Arrays.asList(dataNodeConfig.getDataNodeTransportPort(), dataNodeConfig.getDataNodeHttpPort()));
     }
 

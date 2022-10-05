@@ -7,6 +7,7 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.string.StringEncoder;
 import io.netty.util.ResourceLeakDetector;
@@ -17,7 +18,22 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
+ * 负责和NameNode通讯的组件
+ * <pre>
+ * 1. 负责和服务端维持连接
+ * 2. 提供同步、异步收发消息功能
  *
+ * {@link #retryTime} 来指定重试次数，超过重试次数之后不再重试，回调 {@link #addNetClientFailListener(NetClientFailListener)} 方法设置的监听器
+ *
+ * 如果需要监听连接状态变化，可以使用 {@link #addConnectListener(ConnectListener)}
+ *
+ * 注意：如果设置了重试，{@link ConnectListener#onConnectStatusChanged(boolean)} 方法可能会被多次重复调用
+ *
+ * 可以通过 {@link #send(NettyPacket)} 和 {@link #sendSync(NettyPacket)} 进行同步或异步的网络包发送
+ *
+ * 同样可以通过设置 {@link #addNettyPackageListener(NettyPacketListener)} 来异步监听底层的网络包
+ *
+ * </pre>
  */
 @Slf4j
 public class NetClient {
@@ -56,6 +72,10 @@ public class NetClient {
         });
         this.baseChannelInitializer = new BaseChannelInitializer();
         this.baseChannelInitializer.addHandler(defaultChannelHandler);
+    }
+
+    public SocketChannel socketChannel() {
+        return defaultChannelHandler.socketChannel();
     }
 
     /**
