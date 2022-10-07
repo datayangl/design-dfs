@@ -33,9 +33,8 @@ public class DefaultFileTransportCallback implements FileTransportCallback {
 
     @Override
     public void onCompleted(FileAttribute fileAttribute) throws InterruptedException, IOException {
+        storageManager.recordReplicaReceive(fileAttribute.getFilename(), fileAttribute.getAbsolutePath(), fileAttribute.getSize());
         nameNodeClient.informReplicaReceived(fileAttribute.getFilename(), fileAttribute.getSize());
-
-        //.info("文件下载完成");
     }
 
     @Override

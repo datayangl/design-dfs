@@ -3,6 +3,7 @@ package design.dfs.datanode.server;
 import design.dfs.common.network.NetServer;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.datanode.config.DataNodeConfig;
+import design.dfs.datanode.replica.PeerDataNodes;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
@@ -14,9 +15,12 @@ public class DataNodeServer {
     private DataNodeApis dataNodeApis;
     private NetServer netServer;
     private DataNodeConfig dataNodeConfig;
+    private PeerDataNodes peerDataNodes;
 
-    public DataNodeServer(DataNodeConfig dataNodeConfig, DefaultScheduler defaultScheduler, DataNodeApis dataNodeApis) {
+    public DataNodeServer(DataNodeConfig dataNodeConfig, DefaultScheduler defaultScheduler, PeerDataNodes peerDataNodes,
+                          DataNodeApis dataNodeApis) {
         this.dataNodeConfig = dataNodeConfig;
+        this.peerDataNodes = peerDataNodes;
         this.dataNodeApis = dataNodeApis;
         this.netServer = new NetServer("DataNode-Server", defaultScheduler, dataNodeConfig.getDataNodeWorkerThreads());
     }

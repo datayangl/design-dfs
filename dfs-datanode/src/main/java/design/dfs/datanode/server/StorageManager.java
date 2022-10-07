@@ -1,6 +1,7 @@
 package design.dfs.datanode.server;
 
 import design.dfs.common.FileInfo;
+import design.dfs.common.utils.FileUtil;
 import design.dfs.common.utils.StringUtil;
 import design.dfs.datanode.config.DataNodeConfig;
 import design.dfs.datanode.server.locate.FileLocator;
@@ -9,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -33,6 +35,10 @@ public class StorageManager {
         this.fileLocator = FileLocatorFactory.getFileLocator(dataNodeConfig.getFileLocatorType(),
                 storageDir, HASH_SIZE);
         this.initStorage(storageDir);
+    }
+
+    public String getStorageDir() {
+        return storageDir;
     }
 
     /**
@@ -82,20 +88,21 @@ public class StorageManager {
      *
      * @param dir 目录
      */
-    private List<FileInfo> scanFile(File dir) {
+    public List<FileInfo> scanFile(File dir) {
         List<FileInfo> fileInfos = new LinkedList<>();
 
         try {
-            for (int i = 0; i < HASH_SIZE; i++)
+            for (int i = 0; i < HASH_SIZE; i++) {
                 for (int j = 0; j < HASH_SIZE; j++) {
                     String parent = String.format("%03d", i);
                     String child = String.format("%03d", j);
-                    File storageInfoFile =  new File(dir + File.separator + parent + child + File.separator + STORAGE_INFO);
+                    File storageInfoFile = new File(dir , parent + File.separator + child + File.separator + STORAGE_INFO);
                     if (!storageInfoFile.exists()) {
                         continue;
                     }
                     List<FileInfo> currentFolderFile = new ArrayList<>();
-                    try (FileInputStream fis = new FileInputStream(storageInfoFile); FileChannel fileChannel = fis.getChannel()){
+                    int fileCount = 0;
+                    try (FileInputStream fis = new FileInputStream(storageInfoFile); FileChannel fileChannel = fis.getChannel()) {
                         ByteBuffer byteBuffer = ByteBuffer.allocate((int) storageInfoFile.length());
                         fileChannel.read(byteBuffer);
                         byteBuffer.flip();
@@ -108,6 +115,7 @@ public class StorageManager {
                                 byte[] fileNameBytes = new byte[filenameBytesLength];
                                 byteBuffer.get(fileNameBytes);
                                 String fileName = new String(fileNameBytes, StandardCharsets.UTF_8);
+                                fileCount++;
                                 if (fileExists(fileName)) {
                                     FileInfo fileInfo = new FileInfo();
                                     fileInfo.setFileName(fileName);
@@ -120,8 +128,37 @@ public class StorageManager {
                                 System.exit(0);
                             }
                         }
+                        /*
+                         *
+                         * 假设在DataNode保存了2个文件：
+                         *     - file1
+                         *     - file2
+                         *
+                         * 由于副本过多，NameNode下发命令删除了file1, 此时 storageInfo 文件保存的信息还是2个文件.
+                         *
+                         * 没有比较好的方式删除掉storageInfo的file1记录，所以在DataNode每次重启的时候，
+                         * 校验一下，如果file1在磁盘中是不存在的，则从storageInfo中删除
+                         * (删除方式是新建一个storageInfo文件只保存了file2,然后替换掉原)
+                         *
+                         */
+                        if (fileCount == currentFolderFile.size()) {
+                            continue;
+                        }
+                        for (FileInfo fileInfo : currentFolderFile) {
+                            recordReplicaReceive(fileInfo.getFileName(), getAbsolutePathByFileName(fileInfo.getFileName()),
+                                    fileInfo.getFileSize(), STORAGE_TEMP);
+                        }
+                        File storageTempFile = new File(dir, parent + File.separator + child + File.separator + STORAGE_TEMP);
+                        storageTempFile.createNewFile();
+                        FileUtil.delete(storageInfoFile);
+                        boolean b = storageTempFile.renameTo(storageInfoFile);
+                        if (b) {
+                            log.info("删除旧的storage文件，用新的storage文件替换：[oldFileSize={}, newFileSize={}, file={}]",
+                                    fileCount, currentFolderFile.size(), storageInfoFile.getAbsolutePath());
+                        }
                     }
                 }
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -142,5 +179,40 @@ public class StorageManager {
      */
     public String getAbsolutePathByFileName(String fileName) {
         return fileLocator.locate(fileName);
+    }
+
+    /**
+     * 记录收到一个文件
+     *
+     * @param filename     文件名
+     * @param absolutePath 绝对路径
+     */
+    public void recordReplicaReceive(String filename, String absolutePath, long fileSize) throws IOException {
+        recordReplicaReceive(filename, absolutePath, fileSize, STORAGE_INFO);
+    }
+
+    /**
+     * 记录收到一个文件
+     *
+     * @param filename     文件名
+     * @param absolutePath 绝对路径
+     */
+    public void recordReplicaReceive(String filename, String absolutePath, long fileSize, String file) throws IOException {
+        synchronized (this) {
+            File f = new File(absolutePath);
+            String parent = f.getParent();
+            File recordFile = new File(parent, file);
+            try (FileOutputStream fos = new FileOutputStream(recordFile, true);
+                 FileChannel channel = fos.getChannel()) {
+                byte[] bytes = filename.getBytes();
+                ByteBuffer byteBuffer = ByteBuffer.allocate(bytes.length + 12);
+                byteBuffer.putInt(bytes.length);
+                byteBuffer.putLong(fileSize);
+                byteBuffer.put(bytes);
+                byteBuffer.flip();
+                channel.write(byteBuffer);
+                channel.force(true);
+            }
+        }
     }
 }

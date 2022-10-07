@@ -8,6 +8,8 @@ import design.dfs.common.network.NettyPacket;
 import design.dfs.common.network.RequestWrapper;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.datanode.config.DataNodeConfig;
+import design.dfs.datanode.replica.PeerDataNodes;
+import design.dfs.datanode.replica.ReplicateManager;
 import design.dfs.datanode.server.StorageInfo;
 import design.dfs.datanode.server.StorageManager;
 import design.dfs.model.datanode.*;
@@ -26,15 +28,19 @@ import java.util.stream.Collectors;
 public class NameNodeClient {
     private NetClient netClient;
     private final DefaultScheduler defaultScheduler;
+    private final ReplicateManager replicateManager;
     private final StorageManager storageManager;
     private final DataNodeConfig datanodeConfig;
     private ScheduledFuture<?> scheduledFuture;
 
-    public NameNodeClient(StorageManager storageManager, DefaultScheduler defaultScheduler, DataNodeConfig datanodeConfig) {
+    public NameNodeClient(StorageManager storageManager, DefaultScheduler defaultScheduler, DataNodeConfig datanodeConfig,
+                          PeerDataNodes peerDataNodes) {
         this.netClient = new NetClient("DataNode-NameNode-" + datanodeConfig.getNameNodeAddr(), defaultScheduler);
         this.defaultScheduler = defaultScheduler;
         this.datanodeConfig = datanodeConfig;
         this.storageManager = storageManager;
+        this.replicateManager = new ReplicateManager(defaultScheduler, peerDataNodes, storageManager, this);
+        peerDataNodes.setNameNodeClient(this);
     }
 
     /**
@@ -55,7 +61,7 @@ public class NameNodeClient {
         });
         // TODO 网络失败监听
         this.netClient.addNetClientFailListener(() -> {
-            log.info("DataNode检测到NameNode挂了，标记NameNode已宕机");
+            log.info("DataNode检测到NameNode连接失败，标记NameNode已宕机");
             //backupNodeManager.markNameNodeDown();
         });
 
@@ -84,7 +90,7 @@ public class NameNodeClient {
             return;
         }
         HeartbeatResponse heartbeatResponse = HeartbeatResponse.parseFrom(requestWrapper.getNettyPacket().getBody());
-        handleHeartbeatResponse(heartbeatResponse);
+        handleCommand(heartbeatResponse);
     }
 
     private void handleDataNodeRegisterResponse(RequestWrapper requestWrapper) {
@@ -103,14 +109,19 @@ public class NameNodeClient {
         }
     }
 
-    private void handleHeartbeatResponse(HeartbeatResponse response) {
-       log.info("heartbeat response: {}", response.getResp());
+    private void handleCommand(HeartbeatResponse response) {
+        if (response.getCommandsList().isEmpty()) {
+            return;
+        }
+        List<ReplicaCommand> commands = response.getCommandsList();
+        replicateManager.addReplicateTask(commands);
     }
-        /**
-         * register DataNode
-         *
-         * @throws InterruptedException
-         */
+
+    /**
+     * register DataNode
+     *
+     * @throws InterruptedException
+     */
     private void register() throws InterruptedException {
         StorageInfo storageInfo = storageManager.getStorageInfo();
         RegisterRequest request = RegisterRequest.newBuilder()
@@ -171,6 +182,22 @@ public class NameNodeClient {
                 .setFileSize(fileSize)
                 .build();
         NettyPacket nettyPacket = NettyPacket.buildPacket(replicaReceivedRequest.toByteArray(), PacketType.REPLICA_RECEIVE);
+        netClient.send(nettyPacket);
+    }
+
+    /**
+     * 上报文件副本信息
+     *
+     * @param fileName 文件名称
+     * @param fileSize 文件大小
+     */
+    public void informReplicaRemoved(String fileName, long fileSize) throws InterruptedException {
+        InformReplicaReceivedRequest replicaReceivedRequest = InformReplicaReceivedRequest.newBuilder()
+                .setFilename(fileName)
+                .setHostname(datanodeConfig.getDataNodeTransportAddr())
+                .setFileSize(fileSize)
+                .build();
+        NettyPacket nettyPacket = NettyPacket.buildPacket(replicaReceivedRequest.toByteArray(), PacketType.REPLICA_REMOVE);
         netClient.send(nettyPacket);
     }
 

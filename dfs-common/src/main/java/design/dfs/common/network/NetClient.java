@@ -12,6 +12,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.string.StringEncoder;
 import io.netty.util.ResourceLeakDetector;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,7 @@ public class NetClient {
     private DefaultChannelHandler defaultChannelHandler;
     private List<NetClientFailListener> netClientFailListeners = new ArrayList<>();
     private int retryTime;
+    private volatile boolean hasOtherHandlers = false;
 
     private AtomicBoolean started = new AtomicBoolean(true);
 
@@ -109,6 +111,10 @@ public class NetClient {
                 }
             }
         }
+    }
+
+    public void setHasOtherHandlers(boolean hasOtherHandlers) {
+        this.hasOtherHandlers = hasOtherHandlers;
     }
 
 
@@ -232,6 +238,18 @@ public class NetClient {
         ensureConnected();
         return defaultChannelHandler.sendSync(nettyPacket);
     }
+
+    /**
+     * 添加自定义的handler
+     */
+    public void addHandlers(List<AbstractChannelHandler> handlers) {
+        if (CollectionUtils.isEmpty(handlers)) {
+            return;
+        }
+        defaultChannelHandler.setHasOtherHandlers(true);
+        baseChannelInitializer.addHandlers(handlers);
+    }
+
     /**
      * send request
      *

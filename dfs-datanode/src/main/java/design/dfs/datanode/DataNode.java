@@ -3,6 +3,7 @@ package design.dfs.datanode;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.datanode.config.DataNodeConfig;
 import design.dfs.datanode.namenode.NameNodeClient;
+import design.dfs.datanode.replica.PeerDataNodes;
 import design.dfs.datanode.server.DataNodeApis;
 import design.dfs.datanode.server.DataNodeServer;
 import design.dfs.datanode.server.DefaultFileTransportCallback;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class DataNode {
+    private PeerDataNodes peerDataNodes;
     private DefaultScheduler defaultScheduler;
     private AtomicBoolean started = new AtomicBoolean(false);
     private NameNodeClient nameNodeClient;
@@ -69,8 +71,9 @@ public class DataNode {
         StorageManager storageManager = new StorageManager(dataNodeConfig);
         DefaultFileTransportCallback defaultFileTransportCallback = new DefaultFileTransportCallback(storageManager);
         DataNodeApis dataNodeApis = new DataNodeApis(dataNodeConfig, defaultScheduler, defaultFileTransportCallback);
-        this.nameNodeClient = new NameNodeClient(storageManager, defaultScheduler, dataNodeConfig);
-        this.dataNodeServer = new DataNodeServer(dataNodeConfig, defaultScheduler, dataNodeApis);
+        this.peerDataNodes = new PeerDataNodes(defaultScheduler, dataNodeConfig, dataNodeApis);
+        this.nameNodeClient = new NameNodeClient(storageManager, defaultScheduler, dataNodeConfig, peerDataNodes);
+        this.dataNodeServer = new DataNodeServer(dataNodeConfig, defaultScheduler, peerDataNodes, dataNodeApis);
     }
 
     /**

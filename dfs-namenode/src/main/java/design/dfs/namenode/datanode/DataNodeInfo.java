@@ -1,9 +1,14 @@
 package design.dfs.namenode.datanode;
 
+import design.dfs.namenode.rebalance.RemoveReplicaTask;
+import design.dfs.namenode.rebalance.ReplicaTask;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * DataNode 信息
@@ -22,6 +27,9 @@ public class DataNodeInfo implements Comparable<DataNodeInfo>{
     private volatile long storedDataSize;
     private volatile long freeSpace;
     private int status;
+    private ConcurrentLinkedQueue<ReplicaTask> replicaTasks = new ConcurrentLinkedQueue<>();
+    private ConcurrentLinkedQueue<RemoveReplicaTask> removeReplicaTasks = new ConcurrentLinkedQueue<>();
+
 
     public DataNodeInfo(String hostname, int nioPort, int httpPort, long latestHeartbeatTime) {
         this.hostname = hostname;
@@ -42,6 +50,50 @@ public class DataNodeInfo implements Comparable<DataNodeInfo>{
             this.storedDataSize += fileSize;
             this.freeSpace -= fileSize;
         }
+    }
+
+    /**
+     * 添加副本复制任务
+     *
+     * @param task 任务
+     */
+    public void addReplicaTask(ReplicaTask task) {
+        replicaTasks.add(task);
+    }
+
+    /**
+     * 获取副本复制任务
+     *
+     * @return task任务
+     */
+    public List<ReplicaTask> pollReplicaTask(int maxNum) {
+        List<ReplicaTask> result = new LinkedList<>();
+
+        for (int i = 0; i < maxNum; i++) {
+            ReplicaTask task = replicaTasks.poll();
+            if (task == null) {
+                break;
+            }
+            result.add(task);
+        }
+        return result;
+    }
+
+    public List<RemoveReplicaTask> pollRemoveReplicaTask(int maxNum) {
+        List<RemoveReplicaTask> result = new LinkedList<>();
+
+        for (int i = 0; i < maxNum; i++) {
+            RemoveReplicaTask task = removeReplicaTasks.poll();
+            if (task == null) {
+                break;
+            }
+            result.add(task);
+        }
+        return result;
+    }
+
+    public void addRemoveReplicaTask(RemoveReplicaTask task) {
+        removeReplicaTasks.add(task);
     }
 
     @Override

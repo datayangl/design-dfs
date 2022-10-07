@@ -3,6 +3,7 @@ package design.dfs.namenode.server;
 import com.google.protobuf.InvalidProtocolBufferException;
 import design.dfs.common.Constants;
 import design.dfs.common.FileInfo;
+import design.dfs.common.enums.CommandType;
 import design.dfs.common.enums.PacketType;
 import design.dfs.common.exception.NameNodeException;
 import design.dfs.common.network.AbstractChannelHandler;
@@ -14,10 +15,7 @@ import design.dfs.model.client.CreateFileRequest;
 import design.dfs.model.client.CreateFileResponse;
 import design.dfs.model.client.MkdirRequest;
 import design.dfs.model.common.DataNode;
-import design.dfs.model.datanode.FileMetaInfo;
-import design.dfs.model.datanode.HeartbeatRequest;
-import design.dfs.model.datanode.RegisterRequest;
-import design.dfs.model.datanode.ReportCompleteStorageInfoRequest;
+import design.dfs.model.datanode.*;
 import design.dfs.namenode.config.NameNodeConfig;
 import design.dfs.namenode.datanode.DataNodeInfo;
 import design.dfs.namenode.datanode.DataNodeManager;
@@ -25,6 +23,8 @@ import design.dfs.namenode.editslog.EditLogWrapper;
 import design.dfs.namenode.fs.DiskFileSystem;
 import design.dfs.namenode.fs.EditLogBufferFetcher;
 import design.dfs.namenode.fs.Node;
+import design.dfs.namenode.rebalance.RemoveReplicaTask;
+import design.dfs.namenode.rebalance.ReplicaTask;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
@@ -115,6 +115,9 @@ public class NameNodeApis extends AbstractChannelHandler {
                 case CREATE_FILE_CONFIRM:
                     handleCreateFileConfirmRequest(requestWrapper);
                     break;
+                case REPLICA_RECEIVE:
+                    handleReplicaReceiveRequest(requestWrapper);
+                    break;
                 default:
                     break;
             }
@@ -156,7 +159,35 @@ public class NameNodeApis extends AbstractChannelHandler {
         }
 
         DataNodeInfo dataNodeInfo = dataNodeManager.getDataNode(heartbeatRequest.getHostname());
+        List<ReplicaTask> replicaTask = dataNodeInfo.pollReplicaTask(100);
+        List<ReplicaCommand> replicaCommands = new LinkedList<>();
+        if (!replicaTask.isEmpty()) {
+            List<ReplicaCommand> commands = replicaTask.stream()
+                    .map(r -> ReplicaCommand.newBuilder()
+                            .setFilename(r.getFilename())
+                            .setHostname(r.getHostname())
+                            .setPort(r.getPort())
+                            .setCommand(CommandType.REPLICA_COPY.getValue())
+                            .build())
+                    .collect(Collectors.toList());
+            replicaCommands.addAll(commands);
+        }
+        List<RemoveReplicaTask> removeReplicaTasks = dataNodeInfo.pollRemoveReplicaTask(100);
+        if (!removeReplicaTasks.isEmpty()) {
+            List<ReplicaCommand> commands = removeReplicaTasks.stream()
+                    .map(e -> ReplicaCommand.newBuilder()
+                            .setFilename(e.getFileName())
+                            .setHostname(e.getHostname())
+                            .setCommand(CommandType.REPLICA_REMOVE.getValue())
+                            .build())
+                    .collect(Collectors.toList());
+            replicaCommands.addAll(commands);
+        }
 
+        HeartbeatResponse response = HeartbeatResponse.newBuilder()
+                .addAllCommands(replicaCommands)
+                .build();
+        requestWrapper.sendResponse(response);
     }
 
     /**
@@ -202,7 +233,7 @@ public class NameNodeApis extends AbstractChannelHandler {
             fileInfo.setFileName(file.getFilename());
             fileInfo.setFileSize(file.getFileSize());
             fileInfo.setHostname(request.getHostname());
-            // TODO 增加一个副本
+            dataNodeManager.addReplica(fileInfo);
         }
         if (request.getFinished()) {
             dataNodeManager.setDataNodeReady(request.getHostname());
@@ -241,7 +272,7 @@ public class NameNodeApis extends AbstractChannelHandler {
                         .build())
                 .collect(Collectors.toList());
         diskFileSystem.createFile(fileName, attrMap);
-        List<String> hostList = dataNodeList.stream().map(dataNodeInfo -> dataNodeInfo.getHostname()).collect(Collectors.toList());
+        List<String> hostList = dataNodeList.stream().map(DataNodeInfo::getHostname).collect(Collectors.toList());
         log.info("创建文件：[filename={}, datanodes={}]", fileName, String.join(",", hostList));
         CreateFileResponse response = CreateFileResponse.newBuilder()
                 .addAllDataNodes(dataNodes)
@@ -251,17 +282,30 @@ public class NameNodeApis extends AbstractChannelHandler {
     }
 
     private void handleCreateFileConfirmRequest(RequestWrapper requestWrapper) throws InvalidProtocolBufferException {
-            NettyPacket request = requestWrapper.getNettyPacket();
-            CreateFileRequest createFileRequest = CreateFileRequest.parseFrom(request.getBody());
-            String realFileName = createFileRequest.getFilename();
-            if (request.getAck() != 0) {
-                log.info("文件上传完毕");
-                //dataNodeManager.waitFileReceive(realFileName, 3000);
-            }
-            CreateFileResponse response = CreateFileResponse.newBuilder()
-                    .build();
-            requestWrapper.sendResponse(response);
+        NettyPacket request = requestWrapper.getNettyPacket();
+        CreateFileRequest createFileRequest = CreateFileRequest.parseFrom(request.getBody());
+        String realFileName = createFileRequest.getFilename();
+        if (request.getAck() != 0) {
+            log.info("文件上传完毕");
+            //dataNodeManager.waitFileReceive(realFileName, 3000);
+        }
+        CreateFileResponse response = CreateFileResponse.newBuilder()
+                .build();
+        requestWrapper.sendResponse(response);
     }
+
+    /**
+     * 处理收到副本请求
+     */
+    private void handleReplicaReceiveRequest(RequestWrapper requestWrapper) throws InvalidProtocolBufferException {
+        InformReplicaReceivedRequest request = InformReplicaReceivedRequest.parseFrom(requestWrapper.getNettyPacket().getBody());
+        log.info("收到增量上报的存储信息：[hostname={}, filename={}]", request.getHostname(), request.getFilename());
+        FileInfo fileInfo = new FileInfo(request.getHostname(), request.getFilename(), request.getFileSize());
+        dataNodeManager.addReplica(fileInfo);
+        DataNodeInfo dataNode = dataNodeManager.getDataNode(request.getHostname());
+        dataNode.addStoredDataSize(request.getFileSize());
+    }
+
     /**
      * 返回异常响应信息
      */

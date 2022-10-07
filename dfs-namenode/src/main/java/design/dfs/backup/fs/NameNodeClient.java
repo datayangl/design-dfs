@@ -56,6 +56,10 @@ public class NameNodeClient {
         return response.getEditLogsList();
     }
 
+    public DefaultScheduler getDefaultScheduler() {
+        return defaultScheduler;
+    }
+
     public void shutdown() {
         this.netClient.shutdown();
     }

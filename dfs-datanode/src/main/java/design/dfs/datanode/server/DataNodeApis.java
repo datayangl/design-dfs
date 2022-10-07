@@ -8,6 +8,8 @@ import design.dfs.common.network.file.FilePacket;
 import design.dfs.common.network.file.FileReceiveHandler;
 import design.dfs.common.utils.DefaultScheduler;
 import design.dfs.datanode.config.DataNodeConfig;
+import design.dfs.datanode.namenode.NameNodeClient;
+import design.dfs.datanode.replica.PeerDataNodes;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,6 +25,7 @@ public class DataNodeApis extends AbstractChannelHandler {
     private DefaultScheduler defaultScheduler;
     private FileReceiveHandler fileReceiveHandler;
     private DefaultFileTransportCallback transportCallback;
+    private PeerDataNodes peerDataNodes;
 
     public DataNodeApis(DataNodeConfig dataNodeConfig, DefaultScheduler defaultScheduler, DefaultFileTransportCallback transportCallback) {
         this.dataNodeConfig = dataNodeConfig;
@@ -30,6 +33,15 @@ public class DataNodeApis extends AbstractChannelHandler {
         this.fileReceiveHandler = new FileReceiveHandler(transportCallback);
         this.transportCallback = transportCallback;
     }
+
+    public void setPeerDataNodes(PeerDataNodes peerDataNodes) {
+        this.peerDataNodes = peerDataNodes;
+    }
+
+    public void setNameNodeClient(NameNodeClient nameNodeClient) {
+        this.transportCallback.setNameNodeClient(nameNodeClient);
+    }
+
 
     @Override
     protected boolean handlePackage(ChannelHandlerContext ctx, NettyPacket nettyPacket) throws Exception {

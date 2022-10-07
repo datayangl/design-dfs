@@ -1,5 +1,6 @@
 package design.dfs.namenode.datanode;
 
+import design.dfs.common.Constants;
 import design.dfs.common.FileInfo;
 import design.dfs.common.exception.NameNodeException;
 import design.dfs.common.utils.DateUtil;
@@ -8,6 +9,9 @@ import design.dfs.model.datanode.HeartbeatRequest;
 import design.dfs.model.datanode.RegisterRequest;
 import design.dfs.namenode.config.NameNodeConfig;
 import design.dfs.namenode.fs.DiskFileSystem;
+import design.dfs.namenode.fs.Node;
+import design.dfs.namenode.rebalance.RemoveReplicaTask;
+import design.dfs.namenode.rebalance.ReplicaTask;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
@@ -163,9 +167,22 @@ public class DataNodeManager {
             return;
         }
 
-        for(FileInfo fileInfo : filesByDataNode.values()) {
-            // 寻找可以复制副本的 DataNode
-
+        for (FileInfo fileInfo : filesByDataNode.values()) {
+            // 找到一个可读取文件的DataNode
+            DataNodeInfo sourceDataNode = chooseReadableDataNodeByFileName(fileInfo.getFileName(), dataNodeInfo);
+            if (sourceDataNode == null) {
+                log.warn("警告：找不到适合的DataNode用来获取文件：" + fileInfo.getFileName());
+                continue;
+            }
+            DataNodeInfo destDataNode = allocateReplicateDataNodes(fileInfo, sourceDataNode);
+            if (destDataNode == null) {
+                log.warn("警告：找不到适合的DataNode用来Rebalance");
+                continue;
+            }
+            ReplicaTask task = new ReplicaTask(fileInfo.getFileName(), sourceDataNode.getHostname(), sourceDataNode.getNioPort());
+            log.info("创建副本复制任务：[filename={}, from={}, to={}]", fileInfo.getFileName(),
+                    sourceDataNode.getHostname(), destDataNode.getHostname());
+            destDataNode.addReplicaTask(task);
         }
     }
 
@@ -254,6 +271,7 @@ public class DataNodeManager {
 
     /**
      * 判断 DataNode 节点是否存在指定文件
+     *
      * @param hostname
      * @param filename
      * @return
@@ -267,6 +285,63 @@ public class DataNodeManager {
             replicaLock.readLock().unlock();
         }
     }
+    /**
+     * 增加一个副本
+     *
+     * @param fileInfo 文件信息
+     */
+    public void addReplica(FileInfo fileInfo) {
+        replicaLock.writeLock().lock();
+        try {
+            // 获取该文件所属的DataNode
+            DataNodeInfo dataNode = dataNodes.get(fileInfo.getHostname());
+            // 获取该文件对应的DataNode列表
+            List<DataNodeInfo> dataNodeInfos = replicaByFilename.computeIfAbsent(fileInfo.getFileName(),
+                    k -> new ArrayList<>());
+            Node node = diskFileSystem.listFiles(fileInfo.getFileName());
+            int replicaNum = Integer.parseInt(node.getAttr().getOrDefault(Constants.ATTR_REPLICA_NUM,
+                    String.valueOf(nameNodeConfig.getReplicaNum())));
+            // 如果该文件的副本数量超过配置的数量，则让该DataNode删除文件
+            if (dataNodeInfos.size() >= replicaNum) {
+                RemoveReplicaTask task = new RemoveReplicaTask(dataNode.getHostname(), fileInfo.getFileName());
+                log.info("下发副本删除任务：[hostname={}, filename={}]", dataNode.getHostname(), fileInfo.getFileName());
+                dataNode.addRemoveReplicaTask(task);
+                return;
+            }
+
+            // 副本数量没有超过，将文件信息维护起来
+            dataNodeInfos.add(dataNode);
+            Map<String, FileInfo> files = filesByDataNode.computeIfAbsent(fileInfo.getHostname(), k -> new HashMap<>());
+            files.put(fileInfo.getFileName(), fileInfo);
+            if (log.isDebugEnabled()) {
+                log.debug("收到DataNode文件上报：[hostname={}, filename={}]", fileInfo.getHostname(), fileInfo.getFileName());
+            }
+        } finally {
+            replicaLock.writeLock().unlock();
+        }
+    }
+
+    /**
+     * 为复制任务申请副本，申请的dataNode需要排除目标DataNode的
+     *
+     * @param fileInfo        文件信息
+     * @param excludeDataNode 排除的DataNode
+     */
+    private DataNodeInfo allocateReplicateDataNodes(FileInfo fileInfo, DataNodeInfo excludeDataNode) {
+        List<DataNodeInfo> dataNodeInfos = dataNodes.values().stream()
+                .filter(dataNodeInfo -> !dataNodeInfo.equals(excludeDataNode) &&
+                        dataNodeInfo.getStatus() == DataNodeInfo.STATUS_READY)
+                .sorted()
+                .collect(Collectors.toList());
+        try {
+            List<DataNodeInfo> dataNodesList = selectDataNodeFromList(dataNodeInfos,
+                    1, fileInfo.getFileName());
+            return dataNodesList.get(0);
+        } catch (Exception e) {
+            log.warn("allocateReplicateDataNodes select node failed.", e);
+            return null;
+        }
+    }
 
     /**
      * 通过文件名选择一个可读的 DataNode，同时删除不可读的DataNode
@@ -275,7 +350,7 @@ public class DataNodeManager {
         replicaLock.readLock().lock();
         try {
             List<DataNodeInfo> dataNodeInfos = replicaByFilename.get(filename);
-            if(dataNodeInfos == null || dataNodeInfos.isEmpty()) {
+            if (dataNodeInfos == null || dataNodeInfos.isEmpty()) {
                 return null;
             }
 
@@ -301,4 +376,5 @@ public class DataNodeManager {
     public DiskFileSystem getDiskFileSystem() {
         return diskFileSystem;
     }
+
 }

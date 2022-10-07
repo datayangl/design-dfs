@@ -30,6 +30,10 @@ public class DefaultChannelHandler extends AbstractChannelHandler {
         this.syncRequestSupport = new SyncRequestSupport(name, defaultScheduler, requestTimeout);
     }
 
+    public void setHasOtherHandlers(boolean hasOtherHandlers) {
+        this.hasOtherHandlers = hasOtherHandlers;
+    }
+
     /**
      * 是否建立了连接
      *

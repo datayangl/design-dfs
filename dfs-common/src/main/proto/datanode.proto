@@ -19,7 +19,7 @@ message HeartbeatRequest {
 }
 
 message HeartbeatResponse {
-  string resp = 1;
+  repeated ReplicaCommand commands = 1;
 }
 
 message ReplicaCommand {
@@ -44,4 +44,9 @@ message InformReplicaReceivedRequest {
 message FileMetaInfo {
   string filename = 1;
   int64 fileSize = 2;
+}
+
+message PeerNodeAwareRequest {
+  string peerDataNode = 1;
+  int32 dataNodeId = 2;
 }
