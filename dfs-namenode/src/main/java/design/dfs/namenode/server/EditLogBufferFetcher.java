@@ -1,7 +1,8 @@
-package design.dfs.namenode.fs;
+package design.dfs.namenode.server;
 
 import design.dfs.namenode.editslog.EditLogWrapper;
 import design.dfs.namenode.editslog.EditsLogInfo;
+import design.dfs.namenode.fs.DiskFileSystem;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -14,16 +15,18 @@ import java.util.List;
  */
 @Slf4j
 public class EditLogBufferFetcher {
+    private static final int DEFAULT_FETCH_SIZE = 10;
     private int fetchSize;
     private List<EditLogWrapper> bufferedEditLog = new ArrayList<>();
     private DiskFileSystem fileSystem;
 
     public EditLogBufferFetcher(DiskFileSystem fileSystem) {
-        this(fileSystem, 10);
+        this(fileSystem, DEFAULT_FETCH_SIZE);
     }
 
     public EditLogBufferFetcher(DiskFileSystem fileSystem, int fetchSize) {
         this.fileSystem = fileSystem;
+        this.fetchSize = fetchSize;
     }
 
     /**
