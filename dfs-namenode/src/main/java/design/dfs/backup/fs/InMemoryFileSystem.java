@@ -35,7 +35,7 @@ public class InMemoryFileSystem extends AbstractFileSystem {
                 FsImage fsImage = scanLatestValidFsImage(backupNodeConfig.getBaseDir());
                 if (fsImage != null) {
                     setMaxTxId(fsImage.getMaxTxId());
-
+                    applyFsImage(fsImage);
                 }
                 recovering.compareAndSet(true, false);
             }
@@ -49,5 +49,16 @@ public class InMemoryFileSystem extends AbstractFileSystem {
      */
     public boolean isRecovering() {
         return recovering.get();
+    }
+
+    /**
+     * 获取FSImage
+     *
+     * @return FsImage
+     */
+    public FsImage getFsImage() {
+        FsImage fsImage = directory.createFsImage();
+        fsImage.setMaxTxId(maxTxId);
+        return fsImage;
     }
 }
